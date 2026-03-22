@@ -1,0 +1,22 @@
+# ==========================================
+# ☢️ RADON FUZZER GITIGNORE
+# ==========================================
+
+
+*.o
+*.out
+radon
+radon-cc
+
+
+fuzzer_workspace/
+.cur_input
+
+
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+
+input/
