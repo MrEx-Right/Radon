@@ -145,7 +145,7 @@ func main() {
 
 		// Mutate the payload and write it to disk for the target to consume
 		mutatedPayload := mutator.Mutate(basePayload)
-		os.WriteFile(".cur_input", mutatedPayload, 0644)
+		os.WriteFile("/dev/shm/radon_cur_input", mutatedPayload, 0644)
 		
 		// Trigger the Fork Server to execute the target with the mutated payload
 		status, err := server.TriggerFuzz()
