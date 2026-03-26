@@ -60,8 +60,10 @@ void instrument_assembly(const char *asm_file) {
             // X86_64 Assembly Injection: 
             // Store the block ID in %rcx and call the Radon runtime tracer
             fputs("\t# --- RADON TRAMPOLINE START ---\n", out);
+            fputs("\tpushq %%rcx\n", out);
             fprintf(out, "\tmovq $%d, %%rcx\n", block_id);
             fputs("\tcall __radon_trace\n", out);
+            fputs("\tpopq %%rcx\n", out);
             fputs("\t# --- RADON TRAMPOLINE END ---\n", out);
             
             injected_count++;
