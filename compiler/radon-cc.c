@@ -13,7 +13,10 @@
 
 #define MAP_SIZE 65536 // 64KB coverage map, standard for modern fuzzers
 
-// execute_gcc acts as a passthrough to the system's GCC compiler
+/**
+ * @brief Executes the system GCC compiler as a child process and waits for its completion.
+ * * @param args Null-terminated array of arguments to pass to GCC.
+ */
 void execute_gcc(char **args) {
     pid_t pid = fork();
     if (pid == 0) {
@@ -28,7 +31,11 @@ void execute_gcc(char **args) {
     }
 }
 
-// instrument_assembly parses the raw Assembly and injects tracking payloads
+/**
+ * @brief Parses the raw assembly output and injects coverage-tracking payloads 
+ * at the start of each basic block.
+ * * @param asm_file Path to the target assembly (.s) file.
+ */
 void instrument_assembly(const char *asm_file) {
     char temp_file[256];
     snprintf(temp_file, sizeof(temp_file), "%s.radon", asm_file);
@@ -43,27 +50,43 @@ void instrument_assembly(const char *asm_file) {
     char line[1024];
     int injected_count = 0;
     
-    // Seed the random number generator for unique basic block IDs
-    srand((unsigned int)time(NULL)); 
+    // Seed the PRNG with a combination of time and PID to ensure 
+    // unique block IDs across parallel compilation processes.
+    srand((unsigned int)(time(NULL) ^ getpid())); 
 
     while (fgets(line, sizeof(line), in)) {
         fputs(line, out); // Write the original instruction
         
-        // Target the 'main' function and all GCC-generated branch labels (.L)
-        // Exclude debug labels like .LFB (Function Begin) and .LVL (Locals)
+        // Target the 'main' function and all GCC-generated branch labels (.L).
+        // Exclude debug and internal labels such as .LFB (Function Begin) and .LVL (Locals).
         if (strncmp(line, "main:", 5) == 0 || 
            (strncmp(line, ".L", 2) == 0 && strstr(line, "FB") == NULL && strstr(line, "VL") == NULL)) {
             
-            // Assign a random identifier (0-65535) to this basic block
+            // Assign a pseudo-random identifier (0-65535) to this basic block
             int block_id = rand() % MAP_SIZE;
 
-            // X86_64 Assembly Injection: 
-            // Store the block ID in %rcx and call the Radon runtime tracer
+            // ========================================================================
+            // X86_64 Assembly Injection (The Trampoline)
+            // ========================================================================
             fputs("\t# --- RADON TRAMPOLINE START ---\n", out);
-            fputs("\tpushq %%rcx\n", out);
+            
+            // 1. RED ZONE PROTECTION: Shift the stack pointer by 128 bytes to prevent 
+            //    the tracer from corrupting the target's local variables defined in 
+            //    the System V AMD64 ABI red zone.
+            fputs("\tleaq -128(%rsp), %rsp\n", out);
+            
+            // 2. Backup the RCX register (Using single '%' for fputs).
+            fputs("\tpushq %rcx\n", out);
+            
+            // 3. Load the generated Block ID into RCX and invoke the Radon runtime tracer.
+            //    (Using double '%%' here because fprintf parses format specifiers).
             fprintf(out, "\tmovq $%d, %%rcx\n", block_id);
             fputs("\tcall __radon_trace\n", out);
-            fputs("\tpopq %%rcx\n", out);
+            
+            // 4. Restore the RCX register and the stack pointer to their original states.
+            fputs("\tpopq %rcx\n", out);
+            fputs("\tleaq 128(%rsp), %rsp\n", out);
+            
             fputs("\t# --- RADON TRAMPOLINE END ---\n", out);
             
             injected_count++;
@@ -96,7 +119,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    // Pass through to GCC directly if no C file is specified (e.g., linking phase)
+    // Pass through to GCC directly if no C file is specified (e.g., during linking phase)
     if (!input_file) {
         char **gcc_args = malloc((argc + 1) * sizeof(char*));
         gcc_args[0] = "gcc";

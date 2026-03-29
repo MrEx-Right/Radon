@@ -69,7 +69,7 @@ func drawUI(stats *FuzzerStats, manager *corpus.Manager) {
 			stats.Executions, 
 			stats.Crashes, 
 			stats.Paths, 
-			len(manager.Queue), 
+			manager.QueueSize(), 
 			execsPerSec)
 
 		fmt.Print(ui)
@@ -105,8 +105,8 @@ func main() {
 	os.Setenv(ipc.ShmEnvVar, fmt.Sprintf("%d", shm.ShmID))
 
 	// Boot up the Execution Engine (Fork Server)
-	enginePath := "execution-engine/fork-server.out" 
-	server, err := ipc.NewForkServer(enginePath, *targetPtr)
+	enginePath := flag.String("engine", "execution-engine/fork-server.out", "Path to fork server executable") 
+	server, err := ipc.NewForkServer(*enginePath, *targetPtr)
 	if err != nil {
 		log.Fatalf("[-] FATAL: Failed to initialize IPC bridge: %v", err)
 	}
@@ -149,8 +149,9 @@ func main() {
 		
 		// Trigger the Fork Server to execute the target with the mutated payload
 		status, err := server.TriggerFuzz()
-		if err != nil {
-			log.Fatalf("\n[-] ERROR: Fuzz execution failed: %v", err)
+			if err != nil {
+    		shm.CleanUp() 
+    		log.Fatalf("\n[-] ERROR: Fuzz execution failed: %v", err)
 		}
 		
 		// 2. COVERAGE FEEDBACK ANALYSIS - The Fuzzer's "Brain"

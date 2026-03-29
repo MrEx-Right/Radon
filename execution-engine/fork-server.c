@@ -53,6 +53,14 @@ void setup_shared_memory() {
 }
 
 void setup_child_io_redirection() {
+    
+    int input_fd = open("/dev/shm/radon_cur_input", O_RDONLY);
+    if (input_fd < 0) {
+        perror("[-] FATAL: Failed to open payload from shm");
+        exit(EXIT_FAILURE);
+    }
+
+    
     int dev_null_fd = open("/dev/null", O_RDWR);
     if (dev_null_fd < 0) {
         perror("[-] FATAL: Failed to open /dev/null");
@@ -62,11 +70,7 @@ void setup_child_io_redirection() {
     dup2(dev_null_fd, STDERR_FILENO);
     close(dev_null_fd);
 
-    int input_fd = open("/dev/shm/radon_cur_input", O_RDONLY);
-    if (input_fd < 0) {
-        perror("[-] FATAL: Failed to open payload from shm");
-        exit(EXIT_FAILURE);
-    }
+    
     dup2(input_fd, STDIN_FILENO);
     close(input_fd);
 }
@@ -107,6 +111,7 @@ void run_fork_server(char* target_path, char** target_argv) {
             
             execv(target_path, target_argv);
             
+            // execv sadece hata verirse buraya döner
             perror("[-] FATAL: execv() failed in child process");
             exit(EXIT_FAILURE); 
         }

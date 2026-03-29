@@ -12,6 +12,7 @@ radon-cc
 fuzzer_workspace/
 .cur_input
 
+test-targets/
 
 .DS_Store
 .vscode/
