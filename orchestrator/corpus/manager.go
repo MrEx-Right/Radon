@@ -111,9 +111,12 @@ func (cm *Manager) SaveSeed(data []byte) {
 		Filename: filename,
 		IsSeed:   false, 
 	})
+	// ARCHITECTURAL OPTIMIZATION: 
+	// We deliberately unlock the mutex BEFORE performing the I/O operation.
+	// Disk writes are expensive; keeping the mutex locked would bottleneck the fuzzing loop.
 	cm.mu.Unlock() 
 	
-	
+	// Unprotected I/O operation (Thread-Safe since each filename is strictly unique)
 	path := filepath.Join(cm.OutputDir, "queue", filename)
 	os.WriteFile(path, data, 0644)
 }

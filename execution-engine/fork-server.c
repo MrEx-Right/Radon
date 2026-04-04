@@ -104,14 +104,19 @@ void run_fork_server(char* target_path, char** target_argv) {
         }
 
         // CHILD PROCESS
-        if (child_pid == 0) {
+       if (child_pid == 0) {
             setup_child_io_redirection();
+
+            // Security & Stability: Close IPC file descriptors in the child process.
+            // We strictly forbid the vulnerable target from accessing or holding the Fuzzer's pipes open.
+            close(FORKSRV_CTRL_FD);
+            close(FORKSRV_STATUS_FD);
 
             // TODO: Inject PTRACE agent here for deep binary coverage tracking later
             
             execv(target_path, target_argv);
             
-            // execv sadece hata verirse buraya döner
+            // execv only returns if it encounters an error
             perror("[-] FATAL: execv() failed in child process");
             exit(EXIT_FAILURE); 
         }
@@ -122,12 +127,32 @@ void run_fork_server(char* target_path, char** target_argv) {
             exit(EXIT_FAILURE);
         }
 
+if (write(FORKSRV_STATUS_FD, &child_pid, 4) != 4) {
+            perror("[-] FATAL: Failed to send child PID to Orchestrator");
+            exit(EXIT_FAILURE);
+        }
+
+        // Wait for the target to finish executing (or crash)
         if (waitpid(child_pid, &status, 0) <= 0) {
             perror("[-] FATAL: waitpid() failed");
             exit(EXIT_FAILURE);
         }
 
-        if (write(FORKSRV_STATUS_FD, &status, 4) != 4) {
+        int final_status = 0;
+
+        // Process the raw waitpid status to determine the actual exit condition
+        if (WIFSIGNALED(status)) {
+            // Target was killed by a signal (e.g., SIGSEGV = 11, SIGABRT = 6)
+            // POSIX Convention: Signal Number + 128 (e.g., 11 + 128 = 139)
+            final_status = WTERMSIG(status) + 128; 
+        } 
+        else if (WIFEXITED(status)) {
+            // Target exited normally without crashing
+            final_status = WEXITSTATUS(status);
+        }
+
+        // Send the processed, clean exit status back to the Orchestrator's brain
+        if (write(FORKSRV_STATUS_FD, &final_status, 4) != 4) {
             perror("[-] FATAL: Failed to send execution status to Orchestrator");
             exit(EXIT_FAILURE);
         }

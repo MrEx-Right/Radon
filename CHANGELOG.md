@@ -2,6 +2,16 @@
 
 All notable changes to the **Radon Fuzzer** project will be documented in this file.
 
+## [v1.0.3-beta] - 2026-04-05
+### ☢️ The POSIX Purge & IPC Lockdown Update
+
+- **Professional CLI Experience:** Eradicated the default, unpolished command-line help interfaces. Both the Go Orchestrator (`radon`) and the C Compiler Wrapper (`radon-cc`) now feature custom, highly detailed terminal usage menus (`-h` / `--help`) that clearly define arguments, default paths, and practical examples.
+- **POSIX Signal Translation:** Fixed a critical flaw where the Go Orchestrator misinterpreted target crashes. The Fork Server now correctly extracts signals via standard POSIX macros (`WIFSIGNALED`, `WTERMSIG`) and forwards standardized exit codes (e.g., `139` for `SIGSEGV`), ensuring 100% accurate crash triage.
+- **IPC Pipe Leak / Zombie FD Lockdown:** Patched a severe stability vulnerability in the Fork Server. The fuzzer's communication pipes (`FORKSRV_CTRL_FD`, `FORKSRV_STATUS_FD`) are now strictly closed within the child process *before* `execv` is called. This prevents vulnerable target applications from hijacking or crashing the Fuzzer's internal nervous system.
+- **Trampoline False-Positive Elimination:** Toughened the `radon-cc` assembly injection logic to prevent catastrophic `SIGILL` crashes. The tracer now strictly requires a colon (`:`) to confirm label definitions and utilizes an expanded blacklist to ignore non-executable labels like `.LFE` (Function End) and `.LC` (String Constants).
+- **Zombie SHM Leak (IPC_RMID):** Resolved a stealthy memory leak where detached 64KB shared memory segments were not being destroyed by the OS. Explicitly defined and enforced the `IPC_RMID` command during the teardown sequence to guarantee absolute memory reclamation.
+- **Runtime Panic Prevention:** Fixed a fatal bug in the Go Orchestrator (`main.go`) where calling `flag.Parse()` prematurely caused runtime panics when allocating the Fork Server engine path. The execution and CLI parsing sequence is now strictly ordered.
+
 ## [v1.0.2-beta] - 2026-03-29
 ### 🛡️ The Great Stabilizer & Red Zone Rescue Update
 

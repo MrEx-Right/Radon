@@ -77,15 +77,41 @@ func drawUI(stats *FuzzerStats, manager *corpus.Manager) {
 }
 
 func main() {
-	// Parse CLI arguments
+	// 1. Define all CLI arguments before parsing to prevent runtime panics
 	targetPtr := flag.String("target", "", "Path to the vulnerable target binary")
 	inputDirPtr := flag.String("in", "input", "Directory containing initial seed files")
 	outputDirPtr := flag.String("out", "fuzzer_workspace", "Directory to store crashes")
+	enginePath := flag.String("engine", "execution-engine/fork-server.out", "Path to the fork server executable") 
+
+	flag.Usage = func() {
+		fmt.Printf(`
+  ======================================================
+                 ☢️  RADON FUZZER v1.0-beta  ☢️
+  ======================================================
+  An autonomous, coverage-guided white-box fuzzer.
+
+  USAGE:
+    ./radon --target <path_to_binary> [OPTIONS]
+
+  OPTIONS:
+    --target <path>   (REQUIRED) Path to the instrumented target binary.
+    --in <dir>        Directory containing initial seed files (Default: "input").
+    --out <dir>       Workspace directory for crashes/queue (Default: "fuzzer_workspace").
+    --engine <path>   Path to the Fork Server engine (Default: "execution-engine/fork-server.out").
+
+  EXAMPLES:
+    ./radon --target ./test-targets/kurban.out
+    ./radon --target ./test-targets/kurban.out --in custom_seeds/
+  ======================================================
+`)
+	}
+	
+	// 2. Parse flags once all definitions are complete
 	flag.Parse()
 
 	if *targetPtr == "" {
 		fmt.Println("[-] FATAL: Target binary not specified.")
-		fmt.Println("[*] Usage: ./radon --target <path_to_binary> [--in <input_dir>]")
+		fmt.Println("[*] Usage: ./radon --target <path_to_binary> [--in <input_dir>] [--engine <path_to_fork_server>]")
 		os.Exit(1)
 	}
 
@@ -105,7 +131,7 @@ func main() {
 	os.Setenv(ipc.ShmEnvVar, fmt.Sprintf("%d", shm.ShmID))
 
 	// Boot up the Execution Engine (Fork Server)
-	enginePath := flag.String("engine", "execution-engine/fork-server.out", "Path to fork server executable") 
+	// (KANKA DİKKAT: Buradaki kaçak enginePath satırını sildik, zaten yukarıda tanımlı!)
 	server, err := ipc.NewForkServer(*enginePath, *targetPtr)
 	if err != nil {
 		log.Fatalf("[-] FATAL: Failed to initialize IPC bridge: %v", err)
@@ -150,8 +176,8 @@ func main() {
 		// Trigger the Fork Server to execute the target with the mutated payload
 		status, err := server.TriggerFuzz()
 			if err != nil {
-    		shm.CleanUp() 
-    		log.Fatalf("\n[-] ERROR: Fuzz execution failed: %v", err)
+			shm.CleanUp() 
+			log.Fatalf("\n[-] ERROR: Fuzz execution failed: %v", err)
 		}
 		
 		// 2. COVERAGE FEEDBACK ANALYSIS - The Fuzzer's "Brain"
@@ -170,8 +196,9 @@ func main() {
 			manager.SaveSeed(mutatedPayload)
 		}
 		
-		// Handle crashes (SIGSEGV or SIGABRT usually surface as status 11 or 139)
-		if status == 11 || status == 139 {
+		// Handle crashes based on POSIX signal conventions passed from the Fork Server
+		// SIGSEGV (11) -> 139, SIGABRT (6) -> 134
+		if status == 139 || status == 134 {
 			stats.Crashes++
 			stats.LastCrash = time.Now()
 			crashID := fmt.Sprintf("%d", time.Now().UnixNano())

@@ -40,7 +40,15 @@ func CreateSharedMemory() (*SharedMemory, error) {
 }
 
 // CleanUp detaches and removes the shared memory from the system.
+const IPC_RMID = 0
+
+// CleanUp detaches and removes the shared memory from the system.
+// Crucial to prevent zombie memory segments (leaks) after the fuzzer halts.
 func (shm *SharedMemory) CleanUp() {
+	// 1. Detach the shared memory segment from our process address space
 	syscall.Syscall(syscall.SYS_SHMDT, uintptr(shm.Addr), 0, 0)
-	syscall.Syscall(syscall.SYS_SHMCTL, uintptr(shm.ShmID), 0, 0)
+	
+	// 2. Mark the segment to be destroyed via IPC_RMID
+	// By explicitly issuing IPC_RMID (0), the OS guarantees the memory is freed.
+	syscall.Syscall(syscall.SYS_SHMCTL, uintptr(shm.ShmID), uintptr(IPC_RMID), 0)
 }

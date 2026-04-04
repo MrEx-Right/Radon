@@ -59,8 +59,14 @@ void instrument_assembly(const char *asm_file) {
         
         // Target the 'main' function and all GCC-generated branch labels (.L).
         // Exclude debug and internal labels such as .LFB (Function Begin) and .LVL (Locals).
-        if (strncmp(line, "main:", 5) == 0 || 
-           (strncmp(line, ".L", 2) == 0 && strstr(line, "FB") == NULL && strstr(line, "VL") == NULL)) {
+       if (strncmp(line, "main:", 5) == 0 || 
+           (strncmp(line, ".L", 2) == 0 && 
+            strchr(line, ':') != NULL &&
+            strstr(line, "FB") == NULL && 
+            strstr(line, "FE") == NULL && 
+            strstr(line, "VL") == NULL &&
+            strstr(line, "C") == NULL)) {
+            
             
             // Assign a pseudo-random identifier (0-65535) to this basic block
             int block_id = rand() % MAP_SIZE;
@@ -102,8 +108,30 @@ void instrument_assembly(const char *asm_file) {
 }
 
 int main(int argc, char **argv) {
+
+    // Check for explicit help flags
+    if (argc >= 2 && (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0)) {
+        printf("\n");
+        printf("  ======================================================\n");
+        printf("             ☢️  RADON COMPILER WRAPPER  ☢️\n");
+        printf("  ======================================================\n");
+        printf("  Intercepts GCC to inject coverage-tracking trampolines.\n\n");
+        printf("  USAGE:\n");
+        printf("    ./radon-cc <input.c> -o <output.out> [GCC_OPTIONS]\n\n");
+        printf("  DESCRIPTION:\n");
+        printf("    radon-cc acts as a drop-in replacement for 'gcc'. It compiles\n");
+        printf("    the source to assembly, injects the pure x86_64 tracer\n");
+        printf("    into valid basic blocks, and links the Radon Runtime.\n\n");
+        printf("  EXAMPLES:\n");
+        printf("    ./radon-cc target.c -o target.out\n");
+        printf("    ./radon-cc -O2 target.c -o target.out\n");
+        printf("  ======================================================\n\n");
+        return 0;
+    }
+
     if (argc < 2) {
-        printf("[-] FATAL: No arguments provided to radon-cc\n");
+        printf("[-] FATAL: No arguments provided to radon-cc.\n");
+        printf("[*] Try './radon-cc --help' for more information.\n");
         return 1;
     }
 
