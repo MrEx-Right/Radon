@@ -127,11 +127,6 @@ void run_fork_server(char* target_path, char** target_argv) {
             exit(EXIT_FAILURE);
         }
 
-if (write(FORKSRV_STATUS_FD, &child_pid, 4) != 4) {
-            perror("[-] FATAL: Failed to send child PID to Orchestrator");
-            exit(EXIT_FAILURE);
-        }
-
         // Wait for the target to finish executing (or crash)
         if (waitpid(child_pid, &status, 0) <= 0) {
             perror("[-] FATAL: waitpid() failed");

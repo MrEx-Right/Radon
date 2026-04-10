@@ -8,11 +8,13 @@ import (
 	"fuzzer/orchestrator/mutator"
 	"log"
 	"os"
+	"sync"
 	"time"
 )
 
 // FuzzerStats holds the real-time telemetry data for the TUI dashboard
 type FuzzerStats struct {
+	mu         sync.RWMutex
 	StartTime  time.Time
 	Executions uint64
 	Crashes    uint64
@@ -30,15 +32,22 @@ func drawUI(stats *FuzzerStats, manager *corpus.Manager) {
 		// Move cursor to top-left instead of clearing to prevent screen flickering
 		fmt.Print("\033[H")
 		
+		stats.mu.RLock()
+		execs := stats.Executions
+		crashes := stats.Crashes
+		paths := stats.Paths
+		lastCrash := stats.LastCrash
+		stats.mu.RUnlock()
+
 		elapsed := time.Since(stats.StartTime)
-		execsPerSec := float64(stats.Executions) / elapsed.Seconds()
+		execsPerSec := float64(execs) / elapsed.Seconds()
 		if elapsed.Seconds() < 1 {
 			execsPerSec = 0
 		}
 
 		lastCrashStr := "none seen yet"
-		if !stats.LastCrash.IsZero() {
-			lastCrashStr = time.Since(stats.LastCrash).Round(time.Second).String() + " ago"
+		if !lastCrash.IsZero() {
+			lastCrashStr = time.Since(lastCrash).Round(time.Second).String() + " ago"
 		}
 
 		// The highly optimized, professional TUI layout
@@ -66,9 +75,9 @@ func drawUI(stats *FuzzerStats, manager *corpus.Manager) {
 `, 
 			elapsed.Round(time.Second), 
 			lastCrashStr, 
-			stats.Executions, 
-			stats.Crashes, 
-			stats.Paths, 
+			execs, 
+			crashes, 
+			paths, 
 			manager.QueueSize(), 
 			execsPerSec)
 
@@ -158,7 +167,9 @@ func main() {
 
 	// MAIN FUZZING LOOP
 	for {
+		stats.mu.Lock()
 		stats.Executions++
+		stats.mu.Unlock()
 		
 		// 1. Clear previous execution traces to avoid trace collisions
 		copy(shm.Bitmap, zeroMap)
@@ -192,15 +203,19 @@ func main() {
 
 		// 3. EVOLUTION: If a novel path was discovered, save the payload as a new seed!
 		if hasNewPath {
+			stats.mu.Lock()
 			stats.Paths++
+			stats.mu.Unlock()
 			manager.SaveSeed(mutatedPayload)
 		}
 		
 		// Handle crashes based on POSIX signal conventions passed from the Fork Server
 		// SIGSEGV (11) -> 139, SIGABRT (6) -> 134
 		if status == 139 || status == 134 {
+			stats.mu.Lock()
 			stats.Crashes++
 			stats.LastCrash = time.Now()
+			stats.mu.Unlock()
 			crashID := fmt.Sprintf("%d", time.Now().UnixNano())
 			manager.SaveCrash(mutatedPayload, crashID)
 		}

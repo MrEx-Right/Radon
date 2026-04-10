@@ -84,11 +84,17 @@ void instrument_assembly(const char *asm_file) {
             // 2. Backup the RCX register (Using single '%' for fputs).
             fputs("\tpushq %rcx\n", out);
             
+            // Fix stack alignment (16-byte boundary)
+            fputs("\tsubq $8, %rsp\n", out);
+
             // 3. Load the generated Block ID into RCX and invoke the Radon runtime tracer.
             //    (Using double '%%' here because fprintf parses format specifiers).
             fprintf(out, "\tmovq $%d, %%rcx\n", block_id);
             fputs("\tcall __radon_trace\n", out);
             
+            // Restore stack alignment
+            fputs("\taddq $8, %rsp\n", out);
+
             // 4. Restore the RCX register and the stack pointer to their original states.
             fputs("\tpopq %rcx\n", out);
             fputs("\tleaq 128(%rsp), %rsp\n", out);
@@ -172,8 +178,29 @@ int main(int argc, char **argv) {
     instrument_assembly(asm_file);
 
     // Phase 3: Assemble the poisoned code into the final executable
-    // NOTE: In the future, we must link the radon-rt.o runtime here!
-    char *final_args[] = {"gcc", asm_file, "compiler/radon-rt.o", "compiler/radon-trace.o", "-o", output_file, NULL};
+    // Resolve the directory of the radon-cc executable to find the .o files
+    char exe_path[1024];
+    ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
+    if (len != -1) {
+        exe_path[len] = '\0';
+    } else {
+        strncpy(exe_path, argv[0], sizeof(exe_path) - 1);
+        exe_path[sizeof(exe_path) - 1] = '\0';
+    }
+
+    char *last_slash = strrchr(exe_path, '/');
+    if (last_slash) {
+        *last_slash = '\0';
+    } else {
+        strcpy(exe_path, ".");
+    }
+
+    char rt_obj[2048];
+    char trace_obj[2048];
+    snprintf(rt_obj, sizeof(rt_obj), "%s/radon-rt.o", exe_path);
+    snprintf(trace_obj, sizeof(trace_obj), "%s/radon-trace.o", exe_path);
+
+    char *final_args[] = {"gcc", asm_file, rt_obj, trace_obj, "-o", output_file, NULL};
     execute_gcc(final_args);
 
     // Cleanup temporary files

@@ -3,13 +3,8 @@ package mutator
 import (
 	"encoding/binary"
 	"math/rand"
-	"time"
 )
 
-// Initialize the global pseudo-random number generator.
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
 
 // Mutate applies a series of Havoc-style mutations to the provided byte slice.
 // This function utilizes stacking to apply multiple random strategies in a single pass.

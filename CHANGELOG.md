@@ -2,6 +2,15 @@
 
 All notable changes to the **Radon Fuzzer** project will be documented in this file.
 
+## [v1.0.4-beta] - 2026-04-11
+### 🛡️ The Thread-Safe & ABI Rescue Update
+
+- **Thread-Safe Telemetry Engine:** Eradicated a severe data race condition in the Go Orchestrator (`main.go`). The `FuzzerStats` telemetry structure is now strictly protected, ensuring zero memory corruption between the high-speed fuzzing loop and the real-time TUI dashboard.
+- **System V ABI Stack Alignment:** Patched a critical assembly injection flaw in `radon-cc.c` where the `pushq` instruction misaligned the target's stack by 8 bytes. Strict 16-byte stack boundary alignment is now enforced prior to invoking the `__radon_trace` trampoline, completely eliminating false-positive `SIGILL` and `SIGSEGV` crashes.
+- **IPC Synchronization Lockdown:** Fixed a catastrophic communication breakdown in the Fork Server (`fork-server.c`). Removed a duplicated process ID write operation that was desynchronizing the Orchestrator's pipe reads, ensuring a 1:1 handshake ratio and restoring full fuzzer visibility.
+- **Dynamic Compiler Resolution:** Eliminated hardcoded object linking paths (`radon-rt.o`, `radon-trace.o`) in the C compiler wrapper. `radon-cc` now dynamically resolves its absolute execution path at runtime, allowing the fuzzer suite to be utilized seamlessly from any system directory.
+- **Modernized PRNG Seeding:** Refactored the Havoc mutation engine (`mutator.go`) to remove deprecated legacy global seed initializations (`rand.Seed`). The engine now utilizes modern Go randomized generation patterns for robust, warning-free payload synthesis.
+
 ## [v1.0.3-beta] - 2026-04-05
 ### ☢️ The POSIX Purge & IPC Lockdown Update
 
